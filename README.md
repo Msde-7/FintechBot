@@ -1,0 +1,1 @@
+A bot for the Fintech Discord server
