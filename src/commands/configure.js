@@ -1,7 +1,8 @@
-import FundManager from '../db/fundManager.js';
+import FundManager from '../db/FundManager.js'; 
 
-const fundManager = new FundManager();
-
+const fundManager = new FundManager(); 
+ 
+//Note to self: Do not keep adding more nested options.
 export const data = {
   name: 'configure',
   description: 'Configures the fund and manages stocks.',
@@ -11,7 +12,7 @@ export const data = {
       type: 1, // SUBCOMMAND type
       description: 'Manage the fund.',
       options: [
-        {
+        { 
           name: 'amount',
           type: 10, // NUMBER type
           description: 'The amount to add or delete from the fund.',

@@ -1,8 +1,11 @@
 import sqlite3 from 'sqlite3';
+import StockPriceFetcher from '../api/StockPriceFetcher.js';
 
+// Please tell me the afterlife is not async Javascript :(
 class FundManager {
   constructor(dbPath = './src/db/fund_manager.db') {
     this.db = new sqlite3.Database(dbPath);
+    this.stockPriceFetcher = new StockPriceFetcher('ctka619r01qntkqokiigctka619r01qntkqokij0');
     this.init();
   }
 
@@ -29,12 +32,60 @@ class FundManager {
         action TEXT NOT NULL,
         options TEXT NOT NULL
       )`);
+
+      this.db.run(`CREATE TABLE IF NOT EXISTS stock_prices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticker TEXT NOT NULL,
+        date TEXT NOT NULL,
+        price REAL NOT NULL,
+        FOREIGN KEY (ticker) REFERENCES stocks(ticker)
+      )`);
     });
   }
 
   logAction(action, options) {
     const optionsJSON = JSON.stringify(options);
     this.db.run(`INSERT INTO history (action, options) VALUES (?, ?)`, [action, optionsJSON]);
+  }
+
+  addStockPrice(ticker, date, price) {
+    this.db.run(
+      `INSERT INTO stock_prices (ticker, date, price) VALUES (?, ?, ?)`,
+      [ticker, date, price],
+      (err) => {
+        if (err) {
+          console.error(`Error adding stock price for ${ticker} on ${date}:`, err.message);
+        } else {
+          console.log(`Added stock price for ${ticker} on ${date}: $${price}`);
+        }
+      }
+    );
+  }
+
+  getStockPrices(ticker, callback) {
+    this.db.all(
+      `SELECT date, price FROM stock_prices WHERE ticker = ? ORDER BY date`,
+      [ticker],
+      (err, rows) => {
+        if (err) {
+          console.error(`Error fetching stock prices for ${ticker}:`, err.message);
+          callback(err, null);
+        } else {
+          callback(null, rows);
+        }
+      }
+    );
+  }
+
+  async updateStockPrices(ticker) {
+    try {
+      const prices = await this.stockPriceFetcher.getHistoricalPrices(ticker);
+      prices.forEach(({ date, price }) => {
+        this.addStockPrice(ticker, date, price);
+      });
+    } catch (error) {
+      console.error(`Error updating stock prices for ${ticker}:`, error.message);
+    }
   }
 
   addFund(amount, date) {
@@ -107,6 +158,8 @@ class FundManager {
         );
       }
     });
+
+    this.addStockPrice(ticker, date, price);
   }
 
   deleteStock(ticker, quantity, date) {
@@ -151,69 +204,226 @@ class FundManager {
     });
   }
 
-  undoLastAction() {
-    this.db.get(`SELECT * FROM history ORDER BY id DESC LIMIT 1`, (err, lastActionRow) => {
-      if (!lastActionRow) {
-        console.log('No actions to undo.');
-        return;
+  async calculateStockPerformance(ticker, time_used = "current") {
+    try {
+      let price = 0;
+      switch (time_used) {
+        case "open":
+          price = await this.stockPriceFetcher.getMarketOpenPrice(ticker);
+          break;
+        case "close":
+          price = await this.stockPriceFetcher.getMarketClosePrice(ticker);
+          break;
+        default:
+          price = await this.stockPriceFetcher.getCurrentPrice(ticker);
+          break;
       }
+      return price;
+    } catch (error) {
+      console.error(`Error calculating performance for ${ticker}:`, error.message);
+      throw new Error("Failed to fetch stock performance.");
+    }
+  }
 
-      const { action, options } = JSON.parse(lastActionRow.options);
-
-      if (action === 'fund') {
-        this.db.run(`DELETE FROM fund WHERE rowid = (SELECT MAX(rowid) FROM fund)`);
-      } else if (action === 'add') {
-        const { ticker, quantity, price } = options;
-        const totalCost = quantity * price;
-        
-        // Undo adding a stock (decrease the fund amount)
-        this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, fundRow) => {
-          if (fundRow) {
-            const newFundAmount = fundRow.amount + totalCost;
-            this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newFundAmount, fundRow.id]);
+  //Pain 
+  async calculateFundReport(time_used = "current") {
+    try {
+      const funds = await new Promise((resolve, reject) => {
+        this.getFunds((err, result) => {
+          if (err) {
+            console.error("Error fetching funds:", err.message);
+            reject(err);
+          } else {
+            resolve(result || 0);
           }
         });
-
-        this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], (err, row) => {
-          if (row) {
-            const newQuantity = row.quantity - quantity;
-            if (newQuantity <= 0) {
-              this.db.run(`DELETE FROM stocks WHERE ticker = ?`, [ticker]);
-            } else {
-              this.db.run(`UPDATE stocks SET quantity = ? WHERE ticker = ?`, [newQuantity, ticker]);
+      });
+  
+      return new Promise((resolve, reject) => {
+        this.db.all(`SELECT ticker, quantity, price FROM stocks`, async (err, rows) => {
+          if (err) {
+            console.error("Error fetching stocks from database:", err.message);
+            return reject("Failed to fetch stocks.");
+          }
+  
+          if (!rows || rows.length === 0) {
+            console.log("No stocks found in the portfolio.");
+            resolve({ report: [], funds, totalFundGain: "0.00", totalFundGainPercentage: "0.00" });
+            return;
+          }
+  
+          const report = [];
+          let totalPurchaseValue = 0;
+          let totalMarketValue = 0;
+  
+          for (const stock of rows) {
+            const { ticker, quantity, price: purchasePrice } = stock;
+  
+            if (!ticker || !quantity || !purchasePrice) {
+              console.warn(`Skipping invalid stock record: ${JSON.stringify(stock)}`);
+              continue;
+            }
+  
+            try {
+              const price = await this.calculateStockPerformance(ticker, time_used);
+              const gainPerStock = price - purchasePrice;
+              const totalGain = gainPerStock * quantity;
+              const gainPercentage = purchasePrice
+                ? ((gainPerStock / purchasePrice) * 100).toFixed(2)
+                : "0.00";
+  
+              totalPurchaseValue += purchasePrice * quantity;
+              totalMarketValue += price * quantity;
+  
+              report.push({
+                ticker,
+                quantity,
+                purchasePrice: purchasePrice.toFixed(2),
+                price: price.toFixed(2),
+                gainPerStock: gainPerStock.toFixed(2),
+                totalGain: totalGain.toFixed(2),
+                gainPercentage,
+              });
+            } catch (error) {
+              console.error(`Error processing stock ${ticker}:`, error.message);
             }
           }
+  
+          const totalFundGain = totalMarketValue - totalPurchaseValue;
+          const totalPortfolioValue = funds + totalMarketValue;
+          const totalFundGainPercentage = funds
+            ? (((totalPortfolioValue - funds) / funds) * 100).toFixed(2)
+            : "0.00";
+  
+          resolve({
+            report,
+            funds: funds.toFixed(2),
+            totalFundGain: totalFundGain.toFixed(2),
+            totalFundGainPercentage,
+          });
         });
-      } else if (action === 'delete') {
-        const { ticker, quantity, price, exit_price, date } = options;
-        this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], (err, row) => {
-          if (!row) {
-            this.db.run(
-              `INSERT INTO stocks (ticker, quantity, price, exit_price, date, original_date) VALUES (?, ?, ?, ?, ?, ?)`,
-              [ticker, quantity, price, exit_price, date, date]
-            );
-          } else {
-            this.db.run(
-              `UPDATE stocks SET quantity = quantity + ? WHERE ticker = ?`,
-              [quantity || 0, ticker]
-            );
-          }
-        });
-
-        // Undo selling a stock (decrease the fund amount)
-        const totalRevenue = quantity * exit_price;
-        this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, fundRow) => {
-          if (fundRow) {
-            const newFundAmount = fundRow.amount - totalRevenue;
-            this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newFundAmount, fundRow.id]);
-          }
-        });
-      }
-
-      this.db.run(`DELETE FROM history WHERE id = ?`, [lastActionRow.id]);
-      console.log(`Undid action: ${action}`);
-    });
+      });
+    } catch (error) {
+      console.error("Error in calculateFundReport:", error.message);
+      throw error;
+    }
   }
+  
+
+  undoLastAction() {
+    this.db.get(`SELECT * FROM history ORDER BY id DESC LIMIT 1`, (err, lastActionRow) => {
+        if (err) {
+            console.error('Error retrieving last action:', err);
+            return;
+        }
+        if (!lastActionRow) {
+            console.log('No actions to undo.');
+            return;
+        }
+
+        const { action, options } = lastActionRow;
+        const parsedOptions = JSON.parse(options);
+
+        if (action === 'fund') {
+            const { amount } = parsedOptions;
+
+            // Undo the fund by removing the last fund record or setting it to zero
+            this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, row) => {
+                if (err || !row) {
+                    console.error('No fund record to undo:', err);
+                    return;
+                }
+
+                const newAmount = row.amount - amount;
+                if (newAmount <= 0) {
+                    this.db.run(`DELETE FROM fund WHERE id = ?`, [row.id]);
+                } else {
+                    this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newAmount, row.id]);
+                }
+                console.log(`Undid funding of $${amount}. Fund balance updated.`);
+            });
+        } else if (action === 'add') {
+            const { ticker, quantity, price } = parsedOptions;
+            const totalCost = quantity * price;
+
+            // Refund the fund for the cost of stocks
+            this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, fundRow) => {
+                if (err || !fundRow) {
+                    console.error('No fund record to update:', err);
+                    return;
+                }
+
+                const newFundAmount = fundRow.amount + totalCost;
+                this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newFundAmount, fundRow.id]);
+                console.log(`Refunded $${totalCost} to fund.`);
+            });
+
+            // Remove or update the stock record
+            this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], (err, stockRow) => {
+                if (err) {
+                    console.error('Error retrieving stock:', err);
+                    return;
+                }
+
+                if (!stockRow || stockRow.quantity <= quantity) {
+                    this.db.run(`DELETE FROM stocks WHERE ticker = ?`, [ticker], () => {
+                        console.log(`Deleted stock: ${ticker}`);
+                    });
+                } else {
+                    const newQuantity = stockRow.quantity - quantity;
+                    this.db.run(`UPDATE stocks SET quantity = ? WHERE ticker = ?`, [newQuantity, ticker], () => {
+                        console.log(`Updated stock: ${ticker} with new quantity: ${newQuantity}`);
+                    });
+                }
+            });
+        } else if (action === 'delete') {
+            const { ticker, quantity, price, exit_price, date } = parsedOptions;
+            const totalRevenue = quantity * exit_price;
+
+            // Reverse stock deletion
+            this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], (err, stockRow) => {
+                if (err) {
+                    console.error('Error retrieving stock:', err);
+                    return;
+                }
+
+                if (!stockRow) {
+                    this.db.run(
+                        `INSERT INTO stocks (ticker, quantity, price, exit_price, date, original_date) VALUES (?, ?, ?, ?, ?, ?)`,
+                        [ticker, quantity, price, exit_price, date, date],
+                        () => console.log(`Restored stock: ${ticker} with quantity: ${quantity}`)
+                    );
+                } else {
+                    const newQuantity = stockRow.quantity + quantity;
+                    this.db.run(`UPDATE stocks SET quantity = ? WHERE ticker = ?`, [newQuantity, ticker], () => {
+                        console.log(`Updated stock: ${ticker} with new quantity: ${newQuantity}`);
+                    });
+                }
+            });
+
+            // Deduct the refunded revenue from the fund
+            this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, fundRow) => {
+                if (err || !fundRow) {
+                    console.error('No fund record to update:', err);
+                    return;
+                }
+
+                const newFundAmount = fundRow.amount - totalRevenue;
+                this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newFundAmount, fundRow.id]);
+                console.log(`Deducted $${totalRevenue} from fund.`);
+            });
+        }
+
+        // Remove the last action from history
+        this.db.run(`DELETE FROM history WHERE id = ?`, [lastActionRow.id], (err) => {
+            if (err) {
+                console.error('Error deleting action from history:', err);
+                return;
+            }
+            console.log(`Undid action: ${action}`);
+        });
+    });
+}
 
   undoAllActions() {
     this.db.all(`SELECT * FROM history ORDER BY id DESC`, (err, rows) => {

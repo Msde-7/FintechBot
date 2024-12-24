@@ -13,6 +13,7 @@ const loadCommands = async () => {
   const commandsPath = path.resolve('./src/commands');
   const commandFiles = await fs.readdir(commandsPath);
 
+  // JS 🤮 Write this in Python
   for (const file of commandFiles) {
     if (file.endsWith('.js')) {
       const commandPath = path.join(commandsPath, file);
