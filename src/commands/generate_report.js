@@ -1,16 +1,30 @@
+import FundManager from '../db/FundManager.js'; // Adjust the import path accordingly
+
 export const data = {
     name: 'generate_report',
     description: 'Generates and displays the fund performance report.',
+    options: [
+          { 
+            name: 'time',
+            type: 3, // STRING type
+            description: 'Most recent current, close, or open time.',
+            required: true,
+          }
+    ],
   };
-  
-  import FundManager from '../db/FundManager.js'; // Adjust the import path accordingly
-  
+    
   const fundManager = new FundManager();
   
   export async function execute(interaction) {
+    const selectedTime = interaction.options.getString('time');
+    console.log(selectedTime);
+    if(selectedTime !== 'current' && selectedTime !== 'close' && selectedTime !== 'open') {
+      await interaction.reply('Invalid time option. Please select either "current", "close", or "open".');
+      return;
+    }
     try {
       // Fetch the fund report data from the FundManager
-      const { report, funds, totalFundGain, totalFundGainPercentage } = await fundManager.calculateFundReport();
+      const { report, funds, totalFundGain, totalFundGainPercentage } = await fundManager.calculateFundReport(selectedTime);
   
       // Check if there are stocks in the portfolio
       if (!report || report.length === 0) {

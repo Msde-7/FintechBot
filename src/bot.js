@@ -2,6 +2,8 @@ import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
 import fs from 'fs/promises';
 import path from 'path';
 import dotenv from 'dotenv';
+import { scheduleMarketUpdates } from './updates/daily_gains_report.js'; // Import the scheduling logic
+
 dotenv.config();
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
@@ -26,6 +28,9 @@ const loadCommands = async () => {
 
 client.once(Events.ClientReady, () => {
   console.log(`Logged in as ${client.user.tag}!`);
+
+  // Start market update and daily gains report schedules
+  scheduleMarketUpdates(client); // Pass the client instance to the scheduling logic
 });
 
 client.on(Events.InteractionCreate, async interaction => {

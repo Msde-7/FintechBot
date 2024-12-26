@@ -49,6 +49,7 @@ class FundManager {
   }
 
   addStockPrice(ticker, date, price) {
+    ticker = ticker.toUpperCase();
     this.db.run(
       `INSERT INTO stock_prices (ticker, date, price) VALUES (?, ?, ?)`,
       [ticker, date, price],
@@ -63,6 +64,7 @@ class FundManager {
   }
 
   getStockPrices(ticker, callback) {
+    ticker = ticker.toUpperCase();
     this.db.all(
       `SELECT date, price FROM stock_prices WHERE ticker = ? ORDER BY date`,
       [ticker],
@@ -78,6 +80,7 @@ class FundManager {
   }
 
   async updateStockPrices(ticker) {
+    ticker = ticker.toUpperCase();
     try {
       const prices = await this.stockPriceFetcher.getHistoricalPrices(ticker);
       prices.forEach(({ date, price }) => {
@@ -163,6 +166,7 @@ class FundManager {
   }
 
   deleteStock(ticker, quantity, date) {
+    ticker = ticker.toUpperCase();
     console.log(`Deleting stock: ${ticker} Quantity: ${quantity} Date: ${date}`);
     
     this.logAction('delete', { ticker, quantity, date });
@@ -290,10 +294,7 @@ class FundManager {
           }
   
           const totalFundGain = totalMarketValue - totalPurchaseValue;
-          const totalPortfolioValue = funds + totalMarketValue;
-          const totalFundGainPercentage = funds
-            ? (((totalPortfolioValue - funds) / funds) * 100).toFixed(2)
-            : "0.00";
+          const totalFundGainPercentage = ((totalFundGain) / (funds + totalPurchaseValue) * 100).toFixed(2);
   
           resolve({
             report,
@@ -308,7 +309,140 @@ class FundManager {
       throw error;
     }
   }
+
+  getStockInfo(ticker, callback) {
+    ticker = ticker.toUpperCase();
+    this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], async (err, row) => {
+        if (err) {
+            console.error(`Error retrieving stock info for ${ticker}:`, err.message);
+            callback(err, null);
+            return;
+        }
+
+        if (!row) {
+            console.log(`No stock found with ticker: ${ticker}`);
+            callback(null, null);
+            return;
+        }
+
+        const { quantity, price: entryPrice, pitchers, original_date } = row;
+
+        try {
+            // Fetch the most recent price
+            const recentPrice = await this.stockPriceFetcher.getCurrentPrice(ticker);
+
+            const totalOriginalWorth = (entryPrice * quantity).toFixed(2);
+            const totalRecentWorth = (recentPrice * quantity).toFixed(2);
+            const totalGain = (recentPrice - entryPrice) * quantity;
+            const percentageGain = entryPrice
+                ? ((totalGain / (entryPrice * quantity)) * 100).toFixed(2)
+                : "0.00";
+
+            callback(null, {
+                ticker,
+                entryPrice: entryPrice.toFixed(2),
+                totalOriginalWorth,
+                amountBought: quantity,
+                mostRecentPrice: recentPrice.toFixed(2),
+                totalRecentWorth,
+                amountGained: totalGain.toFixed(2),
+                percentageGained: percentageGain,
+                pitchers: pitchers.split(", "),
+                dateBought: original_date, // Include the original_date as dateBought
+            });
+        } catch (error) {
+            console.error(`Error fetching recent price for ${ticker}:`, error.message);
+            callback(error, null);
+        }
+    });
+  }
   
+  async updateDailyGains() {
+    try {
+      // Fetch all stocks from the database
+      this.db.all(`SELECT ticker FROM stocks`, async (err, rows) => {
+        if (err) {
+          console.error("Error fetching stocks from database:", err.message);
+          return;
+        }
+  
+        if (!rows || rows.length === 0) {
+          console.log("No stocks found in the portfolio.");
+          return;
+        }
+  
+        for (const { ticker } of rows) {
+          try {
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+  
+            const todayDate = today.toISOString().split('T')[0];
+            const yesterdayDate = yesterday.toISOString().split('T')[0];
+  
+            // Fetch today's close price
+            const todayClosePrice = await this.stockPriceFetcher.getMarketClosePrice(ticker);
+  
+            // Fetch yesterday's close price
+            let yesterdayClosePrice;
+  
+            // Check if the price for yesterday exists in the database
+            await new Promise((resolve) => {
+              this.db.get(
+                `SELECT price FROM stock_prices WHERE ticker = ? AND date = ?`,
+                [ticker, yesterdayDate],
+                (checkErr, row) => {
+                  if (checkErr) {
+                    console.error(`Error checking yesterday's price for ${ticker}:`, checkErr.message);
+                    resolve(null);
+                  } else {
+                    yesterdayClosePrice = row ? row.price : null;
+                    resolve();
+                  }
+                }
+              );
+            });
+  
+            // If yesterday's price is not found in the database, fetch it
+            if (yesterdayClosePrice === null) {
+              yesterdayClosePrice = await this.stockPriceFetcher.getPreviousClosePrice(ticker);
+              this.db.run(
+                `INSERT INTO stock_prices (ticker, date, price) VALUES (?, ?, ?)`,
+                [ticker, yesterdayDate, yesterdayClosePrice],
+                (insertErr) => {
+                  if (insertErr) {
+                    console.error(`Error inserting yesterday's price for ${ticker}:`, insertErr.message);
+                  } else {
+                    console.log(`Inserted yesterday's price for ${ticker}: $${yesterdayClosePrice}`);
+                  }
+                }
+              );
+            } else {
+              console.log(`Yesterday's price for ${ticker} already exists: $${yesterdayClosePrice}`);
+            }
+
+            // Store today's close price in the database
+            this.db.run(
+              `INSERT INTO stock_prices (ticker, date, price) VALUES (?, ?, ?)`,
+              [ticker, todayDate, todayClosePrice],
+              (insertErr) => {
+                if (insertErr) {
+                  console.error(`Error inserting today's price for ${ticker}:`, insertErr.message);
+                } else {
+                  console.log(`Inserted today's price for ${ticker}: $${todayClosePrice}`);
+                }
+              }
+            );
+          } catch (error) {
+            console.error(`Error updating daily gain for ${ticker}:`, error.message);
+          }
+        }
+      });
+    } catch (error) {
+      console.error("Error in updateDailyGains:", error.message);
+      throw error;
+    }
+  }
 
   undoLastAction() {
     this.db.get(`SELECT * FROM history ORDER BY id DESC LIMIT 1`, (err, lastActionRow) => {
@@ -424,6 +558,114 @@ class FundManager {
         });
     });
 }
+
+async calculateDailyGainsReport() {
+  try {
+    // Ensure daily gains are updated
+    await this.updateDailyGains();
+
+    return new Promise((resolve, reject) => {
+      this.db.all(`SELECT ticker, quantity FROM stocks`, async (err, rows) => {
+        if (err) {
+          console.error("Error fetching stocks from database:", err.message);
+          return reject("Failed to fetch stocks.");
+        }
+
+        if (!rows || rows.length === 0) {
+          console.log("No stocks found in the portfolio.");
+          resolve({ report: [], totalDailyGain: "0.00" });
+          return;
+        }
+
+        const report = [];
+        let totalDailyGain = 0;
+
+        for (const stock of rows) {
+          const { ticker, quantity} = stock;
+
+          if (!ticker || !quantity) {
+            console.warn(`Skipping invalid stock record: ${JSON.stringify(stock)}`);
+            continue;
+          }
+
+          try {
+            // Fetch today's and yesterday's closing prices
+            const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date();
+            yesterday.setDate(new Date().getDate() - 1);
+            const yesterdayDate = yesterday.toISOString().split('T')[0];
+
+            const todayPrice = await new Promise((resolvePrice) => {
+              this.db.get(
+                `SELECT price FROM stock_prices WHERE ticker = ? AND date = ?`,
+                [ticker, today],
+                (checkErr, row) => {
+                  if (checkErr || !row) {
+                    console.error(`Error fetching today's price for ${ticker}:`, checkErr?.message || "No data");
+                    resolvePrice(null);
+                  } else {
+                    resolvePrice(row.price);
+                  }
+                }
+              );
+            });
+
+            const yesterdayPrice = await new Promise((resolvePrice) => {
+              this.db.get(
+                `SELECT price FROM stock_prices WHERE ticker = ? AND date = ?`,
+                [ticker, yesterdayDate],
+                (checkErr, row) => {
+                  if (checkErr || !row) {
+                    console.error(`Error fetching yesterday's price for ${ticker}:`, checkErr?.message || "No data");
+                    resolvePrice(null);
+                  } else {
+                    resolvePrice(row.price);
+                  }
+                }
+              );
+            });
+
+            // If either price is missing, skip calculation
+            if (todayPrice === null || yesterdayPrice === null) {
+              console.warn(`Skipping stock ${ticker} due to missing price data.`);
+              continue;
+            }
+
+            // Calculate daily gain
+            const dailyGainPerStock = todayPrice - yesterdayPrice;
+            const totalGain = dailyGainPerStock * quantity;
+            const gainPercentage = ((dailyGainPerStock / yesterdayPrice) * 100).toFixed(2);
+
+            totalDailyGain += totalGain;
+
+            report.push({
+              ticker,
+              quantity,
+              yesterdayPrice: yesterdayPrice.toFixed(2),
+              todayPrice: todayPrice.toFixed(2),
+              gainPercentage,
+              totalGain: totalGain.toFixed(2),
+            });
+          } catch (error) {
+            console.error(`Error processing stock ${ticker}:`, error.message);
+          }
+        }
+
+        // Sort report by percentage gained in descending order
+        report.sort((a, b) => parseFloat(b.gainPercentage) - parseFloat(a.gainPercentage));
+
+        resolve({
+          report,
+          totalDailyGain: totalDailyGain.toFixed(2),
+        });
+      });
+    });
+  } catch (error) {
+    console.error("Error in calculateDailyGainsReport:", error.message);
+    throw error;
+  }
+}
+
 
   undoAllActions() {
     this.db.all(`SELECT * FROM history ORDER BY id DESC`, (err, rows) => {
