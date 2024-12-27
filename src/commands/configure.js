@@ -2,7 +2,7 @@ import FundManager from '../db/FundManager.js';
 
 const fundManager = new FundManager(); 
  
-//Note to self: Do not keep adding more nested options.
+//Do NOT keep adding more nested options.
 export const data = {
   name: 'configure',
   description: 'Configures the fund and manages stocks.',

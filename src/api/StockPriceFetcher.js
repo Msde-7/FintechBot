@@ -62,25 +62,6 @@ class StockPriceFetcher {
     }
   }
 
-  // Fetch the previous close price
-  async getPreviousClosePrice(ticker) {
-    try {
-      const response = await axios.get(`${this.baseURL}/quote`, {
-        params: {
-          symbol: ticker,
-          token: this.apiKey,
-        },
-      });
-
-      const { pc: previousClose } = response.data;
-      console.log(`Previous close price for ${ticker}: $${previousClose}`);
-      return previousClose;
-    } catch (error) {
-      console.error(`Error fetching previous close price for ${ticker}:`, error.message);
-      throw new Error('Failed to fetch previous close price.');
-    }
-  }
-
   async isMarketOpen() {
     try {
       const response = await axios.get(`${this.baseURL}/market/clock`, {
