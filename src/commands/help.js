@@ -13,7 +13,5 @@ export async function execute(interaction) {
 - /generate_report: Generate fund performance report. Select the most current, close, or open time.`;
 
   await interaction.reply(response);
-
-  await interaction.reply(response);
 }
 

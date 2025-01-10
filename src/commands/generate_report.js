@@ -24,7 +24,7 @@ export const data = {
     }
     try {
       // Fetch the fund report data from the FundManager
-      const { report, funds, totalFundGain, totalFundGainPercentage } = await fundManager.calculateFundReport(selectedTime);
+      const { report, funds, totalFundGain, totalFundGainPercentage } = await fundManager.calcFundReport(selectedTime);
   
       // Check if there are stocks in the portfolio
       if (!report || report.length === 0) {

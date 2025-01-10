@@ -1,11 +1,14 @@
 import sqlite3 from 'sqlite3';
 import StockPriceFetcher from '../api/StockPriceFetcher.js';
+import dotenv from 'dotenv';
+
 
 // Please tell me the afterlife is not async Javascript :(
 class FundManager {
   constructor(dbPath = './src/db/fund_manager.db') {
     this.db = new sqlite3.Database(dbPath);
-    this.stockPriceFetcher = new StockPriceFetcher('ctka619r01qntkqokiigctka619r01qntkqokij0');
+    this.stockPriceFetcher = new StockPriceFetcher(process.env.STOCK_KEY);
+    this.yesterdayPrices = {};
     this.init();
   }
 
@@ -118,6 +121,7 @@ class FundManager {
     });
   }
 
+
   addStock(ticker, quantity, price, exit_price, date, pitchers = []) {
     console.log(`${ticker} ${quantity} ${price} ${exit_price} ${date} Pitchers: ${pitchers.join(', ')}`);
     
@@ -208,7 +212,7 @@ class FundManager {
     });
   }
 
-  async calculateStockPerformance(ticker, time_used = "current") {
+  async getStockPerformance(ticker, time_used = "current") {
     try {
       let price = 0;
       switch (time_used) {
@@ -230,7 +234,7 @@ class FundManager {
   }
 
   //Pain 
-  async calculateFundReport(time_used = "current") {
+  async calcFundReport(time_used = "current") {
     try {
       const funds = await new Promise((resolve, reject) => {
         this.getFunds((err, result) => {
@@ -269,7 +273,7 @@ class FundManager {
             }
   
             try {
-              const price = await this.calculateStockPerformance(ticker, time_used);
+              const price = await this.getStockPerformance(ticker, time_used);
               const gainPerStock = price - purchasePrice;
               const totalGain = gainPerStock * quantity;
               const gainPercentage = purchasePrice
@@ -357,75 +361,6 @@ class FundManager {
     });
   }
   
-  async updateDailyGains() {
-    try {
-      // Fetch all stocks from the database
-      this.db.all(`SELECT ticker FROM stocks`, async (err, rows) => {
-        if (err) {
-          console.error("Error fetching stocks from database:", err.message);
-          return;
-        }
-  
-        if (!rows || rows.length === 0) {
-          console.log("No stocks found in the portfolio.");
-          return;
-        }
-  
-        for (const { ticker } of rows) {
-          try {
-            const today = new Date();
-            const todayDate = today.toISOString().split('T')[0];
-  
-            // Fetch today's close price
-            const todayClosePrice = await this.stockPriceFetcher.getMarketClosePrice(ticker);
-  
-            // Find the most recent date in the database
-            const recentDateRow = await new Promise((resolve) => {
-              this.db.get(
-                `SELECT date, price FROM stock_prices WHERE ticker = ? ORDER BY date DESC LIMIT 1`,
-                [ticker],
-                (checkErr, row) => {
-                  if (checkErr) {
-                    console.error(`Error fetching the most recent date for ${ticker}:`, checkErr.message);
-                    resolve(null);
-                  } else {
-                    resolve(row);
-                  }
-                }
-              );
-            });
-  
-            if (recentDateRow) {
-              console.log(
-                `Most recent price for ${ticker} on ${recentDateRow.date}: $${recentDateRow.price}`
-              );
-            } else {
-              console.log(`No historical prices found for ${ticker}.`);
-            }
-  
-            // Insert today's close price into the database
-            this.db.run(
-              `INSERT INTO stock_prices (ticker, date, price) VALUES (?, ?, ?)`,
-              [ticker, todayDate, todayClosePrice],
-              (insertErr) => {
-                if (insertErr) {
-                  console.error(`Error inserting today's price for ${ticker}:`, insertErr.message);
-                } else {
-                  console.log(`Inserted today's price for ${ticker}: $${todayClosePrice}`);
-                }
-              }
-            );
-          } catch (error) {
-            console.error(`Error updating daily gains for ${ticker}:`, error.message);
-          }
-        }
-      });
-    } catch (error) {
-      console.error("Error in updateDailyGains:", error.message);
-      throw error;
-    }
-  }
-
   undoLastAction() {
     this.db.get(`SELECT * FROM history ORDER BY id DESC LIMIT 1`, (err, lastActionRow) => {
         if (err) {
@@ -541,109 +476,141 @@ class FundManager {
     });
 }
 
-async calculateDailyGainsReport() {
+async updateYesterdaysPrices() {
   try {
-    // Ensure daily gains are updated
-    await this.updateDailyGains();
-
-    return new Promise((resolve, reject) => {
-      this.db.all(`SELECT ticker, quantity FROM stocks`, async (err, rows) => {
+    // Use the getFunds method to fetch the current fund amount
+    const funds = await new Promise((resolve, reject) => {
+      this.getFunds((err, result) => {
         if (err) {
-          console.error("Error fetching stocks from the database:", err.message);
-          return reject(new Error("Failed to fetch stocks."));
+          console.error("Error fetching funds:", err.message);
+          reject(err);
+        } else {
+          resolve(result || 0);
         }
-
-        if (!rows || rows.length === 0) {
-          console.log("No stocks found in the portfolio.");
-          resolve({ report: [], totalDailyGain: "0.00" });
-          return;
-        }
-
-        const report = [];
-        let totalDailyGain = 0;
-
-        for (const stock of rows) {
-          const { ticker, quantity } = stock;
-
-          if (!ticker || quantity === undefined || quantity <= 0) {
-            console.warn(`Skipping invalid stock record: ${JSON.stringify(stock)}`);
-            continue;
-          }
-
-          try {
-            // Fetch today's and the most recent prior prices
-            const today = new Date().toISOString().split('T')[0];
-
-            const todayPrice = await new Promise((resolvePrice) => {
-              this.db.get(
-                `SELECT price FROM stock_prices WHERE ticker = ? AND date = ?`,
-                [ticker, today],
-                (checkErr, row) => {
-                  if (checkErr || !row) {
-                    console.error(`Error fetching today's price for ${ticker}:`, checkErr?.message || "No data");
-                    resolvePrice(null);
-                  } else {
-                    resolvePrice(row.price);
-                  }
-                }
-              );
-            });
-
-            const recentPrice = await new Promise((resolvePrice) => {
-              this.db.get(
-                `SELECT price FROM stock_prices WHERE ticker = ? ORDER BY date DESC LIMIT 1 OFFSET 1`,
-                [ticker],
-                (checkErr, row) => {
-                  if (checkErr || !row) {
-                    console.error(`Error fetching recent prior price for ${ticker}:`, checkErr?.message || "No data");
-                    resolvePrice(null);
-                  } else {
-                    resolvePrice(row.price);
-                  }
-                }
-              );
-            });
-
-            // If either price is missing, skip calculation
-            if (todayPrice === null || recentPrice === null) {
-              console.warn(`Skipping stock ${ticker} due to missing price data.`);
-              continue;
-            }
-
-            // Calculate daily gain
-            const dailyGainPerStock = todayPrice - recentPrice;
-            const totalGain = dailyGainPerStock * quantity;
-            const gainPercentage = ((dailyGainPerStock / recentPrice) * 100).toFixed(2);
-
-            totalDailyGain += totalGain;
-
-            report.push({
-              ticker,
-              quantity,
-              recentPrice: recentPrice.toFixed(2),
-              todayPrice: todayPrice.toFixed(2),
-              gainPercentage,
-              totalGain: totalGain.toFixed(2),
-            });
-          } catch (error) {
-            console.error(`Error processing stock ${ticker}:`, error.message);
-          }
-        }
-
-        // Sort the report by percentage gained in descending order
-        report.sort((a, b) => parseFloat(b.gainPercentage) - parseFloat(a.gainPercentage));
-
-        resolve({
-          report,
-          totalDailyGain: totalDailyGain.toFixed(2),
-        });
       });
     });
+
+    this.yesterdayPrices["fund"] = funds;
+
+    // Fetch all stocks
+    const stocks = await new Promise((resolve, reject) => {
+      this.db.all(`SELECT ticker FROM stocks`, (err, rows) => {
+        if (err) {
+          console.error("Error fetching stocks from database:", err.message);
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+
+    for (const stock of stocks) {
+      const { ticker } = stock;
+      try {
+        const closingPrice = await this.getStockPerformance(ticker, "close");
+        this.yesterdayPrices[ticker] = closingPrice;
+        console.log(`Updated yesterday's price for ${ticker}: $${closingPrice}`);
+      } catch (error) {
+        console.error(`Error updating yesterday's price for ${ticker}:`, error.message);
+      }
+    }
+
+    console.log("Yesterday's prices and fund updated:", this.yesterdayPrices);
   } catch (error) {
-    console.error("Error in calculateDailyGainsReport:", error.message);
+    console.error("Error in updateYesterdaysPrices:", error.message);
+  }
+}
+
+async calcDailyGainsReport() {
+  try {
+    const todaysClosingPrices = {};
+
+    // Fetch funds using the getFunds method
+    const funds = await new Promise((resolve, reject) => {
+      this.getFunds((err, result) => {
+        if (err) {
+          console.error("Error fetching funds:", err.message);
+          reject(err);
+        } else {
+          resolve(result || 0);
+        }
+      });
+    });
+
+    // Fetch all stocks
+    const stocks = await new Promise((resolve, reject) => {
+      this.db.all(`SELECT ticker, quantity FROM stocks`, (err, rows) => {
+        if (err) {
+          console.error("Error fetching stocks from database:", err.message);
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+
+    if (!stocks || stocks.length === 0) {
+      console.log("No stocks found in the portfolio for daily gains calculation.");
+      return { report: [], totalGain: funds.toFixed(2), totalPercentageGain: "0.00" };
+    }
+
+    let totalFundGain = 0;
+    let totalYesterdayValue = this.yesterdayPrices.funds; // Start with the fund amount in yesterday's value
+    const report = [];
+
+    for (const stock of stocks) {
+      const { ticker, quantity } = stock;
+
+      try {
+        // Fetch today's closing price
+        const todaysPrice = await this.getStockPerformance(ticker, "current");
+        todaysClosingPrices[ticker] = todaysPrice;
+
+        // Use yesterday's price from `yesterdayPrices` or default to today's price
+        const yesterdayPrice = this.yesterdayPrices[ticker] || todaysPrice;
+
+        // Calculate gain and percentage
+        const gainPerStock = todaysPrice - yesterdayPrice;
+        const totalGainForStock = gainPerStock * quantity;
+        const percentageGain = yesterdayPrice
+          ? ((gainPerStock / yesterdayPrice) * 100).toFixed(2)
+          : "0.00";
+
+        totalFundGain += totalGainForStock;
+        totalYesterdayValue += yesterdayPrice * quantity;
+
+        // Add to the report
+        report.push({
+          ticker,
+          quantity,
+          yesterdayPrice: yesterdayPrice.toFixed(2),
+          todaysPrice: todaysPrice.toFixed(2),
+          gainPerStock: gainPerStock.toFixed(2),
+          totalGain: totalGainForStock.toFixed(2),
+          percentageGain,
+        });
+      } catch (error) {
+        console.error(`Error calculating gains for ${ticker}:`, error.message);
+      }
+    }
+
+    const totalPercentageGain = totalYesterdayValue
+      ? ((totalFundGain / totalYesterdayValue) * 100).toFixed(2)
+      : "0.00";
+
+    console.log("Daily gains report calculated successfully.");
+    return {
+      report,
+      funds: funds.toFixed(2),
+      totalGain: totalFundGain.toFixed(2),
+      totalPercentageGain,
+    };
+  } catch (error) {
+    console.error("Error in calcDailyGainsReport:", error.message);
     throw error;
   }
 }
+
 
   undoAllActions() {
     this.db.all(`SELECT * FROM history ORDER BY id DESC`, (err, rows) => {

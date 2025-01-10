@@ -4,8 +4,6 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { scheduleMarketUpdates } from './updates/daily_gains_report.js'; // Import the scheduling logic
 
-dotenv.config();
-
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
 // Initialize a collection to hold commands

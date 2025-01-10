@@ -62,23 +62,6 @@ class StockPriceFetcher {
     }
   }
 
-  async isMarketOpen() {
-    try {
-      const response = await axios.get(`${this.baseURL}/market/clock`, {
-        params: {
-          token: this.apiKey,
-        },
-      });
-
-      const { is_open: isOpen } = response.data;
-      console.log(`Market is currently ${isOpen ? 'open' : 'closed'}.`);
-      return isOpen;
-    } catch (error) {
-      console.error('Error fetching market status:', error.message);
-      throw new Error('Failed to fetch market status.');
-    }
-  }
-
 }
 
 export default StockPriceFetcher;
