@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'url';
 import path from 'path';
 
-// Polyfill for __dirname in ES6
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,6 +18,6 @@ export async function execute(interaction) {
             files: [imagePath],
         });
     } catch (error) {
-        console.error("Failed to send the image:", error); // Log errors for debugging
+        console.error("Failed to send the image:", error);
     }
 }

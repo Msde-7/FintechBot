@@ -38,7 +38,7 @@ export async function execute(interaction) {
           amountGained,
           percentageGained,
           pitchers,
-          dateBought, // New field
+          dateBought, 
         } = info;
 
         // Determine graph and emoji based on gain/loss

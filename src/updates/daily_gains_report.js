@@ -1,5 +1,8 @@
 import { scheduleJob } from 'node-schedule';
 import FundManager from '../db/FundManager.js';
+import dotenv from 'dotenv'
+dotenv.config();
+
 
 const channelId = process.env.CHANNEL_ID;
 const fundManager = new FundManager();
@@ -55,8 +58,6 @@ export const scheduleMarketUpdates = (client) => {
           message += `- Total Gain: $${stock.totalGain}\n`;
           message += `- Gain Percentage: ${stock.percentageGain}%\n\n`;
         });
-
-        // Send the message to the designated channel
         await channel.send(message);
       }
     } catch (error) {
@@ -73,7 +74,7 @@ export const scheduleMarketUpdates = (client) => {
 
   // Schedule task to update yesterday's prices daily
   scheduleJob(
-    { hour: 15, minute: 50, dayOfWeek: [1, 2, 3, 4, 5], tz: 'America/New_York' },
+    { hour: 15, minute: 55, dayOfWeek: [1, 2, 3, 4, 5], tz: 'America/New_York' },
     async () => {
       calcIsMarketOpen();
       if (isMarketOpenToday) {

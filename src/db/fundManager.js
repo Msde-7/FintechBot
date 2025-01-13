@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import StockPriceFetcher from '../api/StockPriceFetcher.js';
-import dotenv from 'dotenv';
-
+import dotenv from 'dotenv'
+dotenv.config();
 
 // Please tell me the afterlife is not async Javascript :(
 class FundManager {
@@ -96,22 +96,17 @@ class FundManager {
 
   addFund(amount, date) {
     this.logAction('fund', { amount, date });
-
-    // Get the current fund amount (if any)
     this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, row) => {
       if (row) {
-        // If there are funds, update the amount by adding the new funds
         const newFundAmount = row.amount + amount;
         this.db.run(`UPDATE fund SET amount = ? WHERE id = ?`, [newFundAmount, row.id]);
       } else {
-        // If no funds exist, insert the new amount
         this.db.run(`INSERT INTO fund (amount, date) VALUES (?, ?)`, [amount, date]);
       }
     });
   }
 
   getFunds(callback) {
-    // Get the current fund amount
     this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, row) => {
       if (row) {
         callback(null, row.amount);
@@ -125,15 +120,12 @@ class FundManager {
   addStock(ticker, quantity, price, exit_price, date, pitchers = []) {
     console.log(`${ticker} ${quantity} ${price} ${exit_price} ${date} Pitchers: ${pitchers.join(', ')}`);
     
-    // Convert pitchers array into a comma-separated string
     const pitchersStr = pitchers.join(', ');
 
-    // Calculate the amount spent to buy the stocks
     const totalCost = quantity * price;
 
     this.logAction('add', { ticker, quantity, price, exit_price, date, pitchers });
 
-    // Update the fund amount by deducting the total cost
     this.db.get(`SELECT * FROM fund ORDER BY id DESC LIMIT 1`, (err, row) => {
       if (row) {
         const newFundAmount = row.amount - totalCost;
@@ -152,13 +144,11 @@ class FundManager {
     // Insert or update the stock record
     this.db.get(`SELECT * FROM stocks WHERE ticker = ?`, [ticker], (err, row) => {
       if (row) {
-        // Update stock with new quantity and pitchers
         this.db.run(
           `UPDATE stocks SET quantity = quantity + ?, pitchers = ? WHERE ticker = ?`,
           [quantity, pitchersStr, ticker]
         );
       } else {
-        // Insert new stock with pitchers
         this.db.run(
           `INSERT INTO stocks (ticker, quantity, price, exit_price, date, original_date, pitchers) VALUES (?, ?, ?, ?, ?, ?, ?)`,
           [ticker, quantity, price, exit_price, date, date, pitchersStr]
@@ -490,7 +480,7 @@ async updateYesterdaysPrices() {
       });
     });
 
-    this.yesterdayPrices["fund"] = funds;
+    this.yesterdayPrices["funds"] = funds;
 
     // Fetch all stocks
     const stocks = await new Promise((resolve, reject) => {
@@ -568,6 +558,7 @@ async calcDailyGainsReport() {
 
         // Use yesterday's price from `yesterdayPrices` or default to today's price
         const yesterdayPrice = this.yesterdayPrices[ticker] || todaysPrice;
+        console.log(this.yesterdayPrices);
 
         // Calculate gain and percentage
         const gainPerStock = todaysPrice - yesterdayPrice;

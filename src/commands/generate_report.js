@@ -1,4 +1,4 @@
-import FundManager from '../db/FundManager.js'; // Adjust the import path accordingly
+import FundManager from '../db/FundManager.js';
 
 export const data = {
     name: 'generate_report',

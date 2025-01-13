@@ -2,11 +2,12 @@ import { Client, GatewayIntentBits, Collection, Events } from 'discord.js';
 import fs from 'fs/promises';
 import path from 'path';
 import dotenv from 'dotenv';
-import { scheduleMarketUpdates } from './updates/daily_gains_report.js'; // Import the scheduling logic
+dotenv.config();
+import { scheduleMarketUpdates } from './updates/daily_gains_report.js'; // Scheduling logic
+
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
-// Initialize a collection to hold commands
 client.commands = new Collection();
 
 const loadCommands = async () => {
