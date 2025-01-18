@@ -1,5 +1,7 @@
 import FundManager from '../db/FundManager.js';
 
+//Generates a report giving info on a stock
+
 export const data = {
     name: 'generate_report',
     description: 'Generates and displays the fund performance report.',

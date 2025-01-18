@@ -2,6 +2,8 @@ import FundManager from '../db/FundManager.js';
 
 const fundManager = new FundManager(); 
  
+//Admin configure command allowing management of the fund by those with the "bot tech" role
+
 //Do NOT keep adding more nested options.
 export const data = {
   name: 'configure',

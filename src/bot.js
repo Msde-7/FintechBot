@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config();
-import { scheduleMarketUpdates } from './updates/daily_gains_report.js'; // Scheduling logic
+import { scheduleMarketUpdates } from './updates/daily-gains-report.js'; // Scheduling logic
 
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
@@ -29,7 +29,7 @@ client.once(Events.ClientReady, () => {
   console.log(`Logged in as ${client.user.tag}!`);
 
   // Start market update and daily gains report schedules
-  scheduleMarketUpdates(client); // Pass the client instance to the scheduling logic
+  scheduleMarketUpdates(client);
 });
 
 client.on(Events.InteractionCreate, async interaction => {

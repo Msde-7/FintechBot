@@ -3,6 +3,9 @@ import StockPriceFetcher from '../api/StockPriceFetcher.js';
 import dotenv from 'dotenv'
 dotenv.config();
 
+//Fund manager class to interact with the sql 
+//TODO - Turn into singleton
+
 // Please tell me the afterlife is not async Javascript :(
 class FundManager {
   constructor(dbPath = './src/db/fund_manager.db') {
@@ -511,6 +514,8 @@ async updateYesterdaysPrices() {
   }
 }
 
+//Used by daily-gains-report.js
+//Temporary / slightly inaccurate logic
 async calcDailyGainsReport() {
   try {
     const todaysClosingPrices = {};

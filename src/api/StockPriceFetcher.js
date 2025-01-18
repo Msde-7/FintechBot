@@ -1,67 +1,60 @@
-import axios from 'axios';
+import finnhub from 'finnhub';
 
 class StockPriceFetcher {
   constructor(apiKey) {
     this.apiKey = apiKey;
-    this.baseURL = 'https://finnhub.io/api/v1';
+    this.finnhubClient = new finnhub.DefaultApi();
+    const api_key = finnhub.ApiClient.instance.authentications['api_key'];
+    api_key.apiKey = this.apiKey;
   }
 
   // Fetch the market open price
   async getMarketOpenPrice(ticker) {
-    try {
-      const response = await axios.get(`${this.baseURL}/quote`, {
-        params: {
-          symbol: ticker,
-          token: this.apiKey,
-        },
+    return new Promise((resolve, reject) => {
+      this.finnhubClient.quote(ticker, (error, data, response) => {
+        if (error) {
+          console.error(`Error fetching market open price for ${ticker}:`, error.message);
+          reject(new Error('Failed to fetch market open price.'));
+        } else {
+          const openPrice = data.o;
+          console.log(`Market open price for ${ticker}: $${openPrice}`);
+          resolve(openPrice);
+        }
       });
-
-      const { o: openPrice } = response.data;
-      console.log(`Market open price for ${ticker}: $${openPrice}`);
-      return openPrice;
-    } catch (error) {
-      console.error(`Error fetching market open price for ${ticker}:`, error.message);
-      throw new Error('Failed to fetch market open price.');
-    }
+    });
   }
 
   // Fetch the most recent (current) price
   async getCurrentPrice(ticker) {
-    try {
-      const response = await axios.get(`${this.baseURL}/quote`, {
-        params: {
-          symbol: ticker,
-          token: this.apiKey,
-        },
+    return new Promise((resolve, reject) => {
+      this.finnhubClient.quote(ticker, (error, data, response) => {
+        if (error) {
+          console.error(`Error fetching current price for ${ticker}:`, error.message);
+          reject(new Error('Failed to fetch current price.'));
+        } else {
+          const currentPrice = data.c;
+          console.log(`Current price for ${ticker}: $${currentPrice}`);
+          resolve(currentPrice);
+        }
       });
-
-      const { c: currentPrice } = response.data;
-      console.log(`Current price for ${ticker}: $${currentPrice}`);
-      return currentPrice;
-    } catch (error) {
-      console.error(`Error fetching current price for ${ticker}:`, error.message);
-      throw new Error('Failed to fetch current price.');
-    }
+    });
   }
 
+  // Fetch the previous market close price
   async getMarketClosePrice(ticker) {
-    try {
-      const response = await axios.get(`${this.baseURL}/quote`, {
-        params: {
-          symbol: ticker,
-          token: this.apiKey,
-        },
+    return new Promise((resolve, reject) => {
+      this.finnhubClient.quote(ticker, (error, data, response) => {
+        if (error) {
+          console.error(`Error fetching market close price for ${ticker}:`, error.message);
+          reject(new Error('Failed to fetch market close price.'));
+        } else {
+          const closePrice = data.pc;
+          console.log(`Market close price for ${ticker}: $${closePrice}`);
+          resolve(closePrice);
+        }
       });
-
-      const { pc: closePrice } = response.data;
-      console.log(`Market close price for ${ticker}: $${closePrice}`);
-      return closePrice;
-    } catch (error) {
-      console.error(`Error fetching market close price for ${ticker}:`, error.message);
-      throw new Error('Failed to fetch market close price.');
-    }
+    });
   }
-
 }
 
 export default StockPriceFetcher;
