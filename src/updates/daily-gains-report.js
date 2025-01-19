@@ -25,28 +25,28 @@ const holidays2025 = new Set([
 let isMarketOpenToday = true;
 
 const sendGroupMeMessage = (message) => {
-	options = {
-		hostname: 'api.groupme.com',
-		path: '/v3/bots/post',
-		method: 'POST'
-	};
+    options = {
+        hostname: 'api.groupme.com',
+        path: '/v3/bots/post',
+        method: 'POST'
+    };
 
-	body = {
-		"text" : message,
-		"bot_id" : botID
-	};
+    body = {
+        "text" : message,
+        "bot_id" : botID
+    };
 
-	//console.log('sending ' + message + ' to ' + botID);
+    //console.log('sending ' + message + ' to ' + botID);
 
-	botReq = HTTPS.request(options, function(res) {
-		if(res.statusCode == 202) {
-			//neat
-		} else {
-			console.log('rejecting bad status code ' + res.statusCode);
-		}
-	});
-	
-	botReq.end(JSON.stringify(body));
+    botReq = HTTPS.request(options, function(res) {
+        if(res.statusCode == 202) {
+            //neat
+        } else {
+            console.log('rejecting bad status code ' + res.statusCode);
+        }
+    });
+    
+    botReq.end(JSON.stringify(body));
 }
 
 export const scheduleMarketUpdates = (client) => {
@@ -85,7 +85,7 @@ export const scheduleMarketUpdates = (client) => {
           message += `- Total Gain: $${stock.totalGain}\n`;
           message += `- Gain Percentage: ${stock.percentageGain}%\n\n`;
         });
-		sendGroupMeMessage(message);
+        sendGroupMeMessage(message);
         await channel.send(message);
       }
     } catch (error) {
