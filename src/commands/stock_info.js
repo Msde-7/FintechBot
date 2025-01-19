@@ -1,4 +1,4 @@
-import FundManager from '../db/fundManager.js';
+import FundManager from '../db/FundManager.js';
 
 const fundManager = new FundManager();
 
