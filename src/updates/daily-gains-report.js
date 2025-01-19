@@ -1,11 +1,12 @@
 import { scheduleJob } from 'node-schedule';
 import FundManager from '../db/FundManager.js';
-import sendGroupMeMessage from './groupme.js';
 import dotenv from 'dotenv'
 dotenv.config();
 
 
 const channelId = process.env.CHANNEL_ID;
+const botID = process.env.GROUPME_BOT_ID;
+
 const fundManager = new FundManager();
 
 const holidays2025 = new Set([
@@ -22,6 +23,33 @@ const holidays2025 = new Set([
 ]);
 
 let isMarketOpenToday = true;
+
+var HTTPS = require('https');
+
+const sendGroupMeMessage = (message) => {
+	options = {
+		hostname: 'api.groupme.com',
+		path: '/v3/bots/post',
+		method: 'POST'
+	};
+
+	body = {
+		"text" : message,
+		"bot_id" : botID
+	};
+
+	//console.log('sending ' + message + ' to ' + botID);
+
+	botReq = HTTPS.request(options, function(res) {
+		if(res.statusCode == 202) {
+			//neat
+		} else {
+			console.log('rejecting bad status code ' + res.statusCode);
+		}
+	});
+	
+	botReq.end(JSON.stringify(body));
+}
 
 export const scheduleMarketUpdates = (client) => {
   // Function to generate and send the daily fund report
