@@ -1,5 +1,6 @@
 import { scheduleJob } from 'node-schedule';
 import FundManager from '../db/FundManager.js';
+import sendGroupMeMessage from './groupme.js';
 import dotenv from 'dotenv'
 dotenv.config();
 
@@ -58,6 +59,7 @@ export const scheduleMarketUpdates = (client) => {
           message += `- Total Gain: $${stock.totalGain}\n`;
           message += `- Gain Percentage: ${stock.percentageGain}%\n\n`;
         });
+		sendGroupMeMessage(message);
         await channel.send(message);
       }
     } catch (error) {
