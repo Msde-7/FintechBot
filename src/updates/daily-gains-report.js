@@ -1,8 +1,8 @@
 import { scheduleJob } from 'node-schedule';
+import { default as HTTPS } from 'https';
 import FundManager from '../db/FundManager.js';
 import dotenv from 'dotenv'
 dotenv.config();
-
 
 const channelId = process.env.CHANNEL_ID;
 const botID = process.env.GROUPME_BOT_ID;
@@ -23,8 +23,6 @@ const holidays2025 = new Set([
 ]);
 
 let isMarketOpenToday = true;
-
-var HTTPS = require('https');
 
 const sendGroupMeMessage = (message) => {
 	options = {
