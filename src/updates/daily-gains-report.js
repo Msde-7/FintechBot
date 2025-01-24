@@ -62,6 +62,7 @@ export const scheduleMarketUpdates = (client) => {
 
     try {
       const { report, funds, totalGain, totalPercentageGain } = await fundManager.calcDailyGainsReport();
+      console.log("Bot ID: ", botID);
       console.log("Channel ID: ", channelId);
       const channel = client.channels.cache.get(channelId);
       console.log("Channel: ", channel);
