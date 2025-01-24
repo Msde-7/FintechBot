@@ -25,6 +25,7 @@ const holidays2025 = new Set([
 let isMarketOpenToday = true;
 
 const sendGroupMeMessage = (message) => {
+  console.log("Sending message to GroupMe...");
     options = {
         hostname: 'api.groupme.com',
         path: '/v3/bots/post',
@@ -61,7 +62,9 @@ export const scheduleMarketUpdates = (client) => {
 
     try {
       const { report, funds, totalGain, totalPercentageGain } = await fundManager.calcDailyGainsReport();
+      console.log("Channel ID: ", channelId);
       const channel = client.channels.cache.get(channelId);
+      console.log("Channel: ", channel);
 
       if (channel) {
         let message = '📊 **Daily Fund Performance Report** 📊\n\n';
