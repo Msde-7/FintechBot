@@ -26,20 +26,20 @@ let isMarketOpenToday = true;
 
 const sendGroupMeMessage = (message) => {
   console.log("Sending message to GroupMe...");
-    options = {
+    const options = {
         hostname: 'api.groupme.com',
         path: '/v3/bots/post',
         method: 'POST'
     };
 
-    body = {
+    const body = {
         "text" : message,
         "bot_id" : botID
     };
 
     //console.log('sending ' + message + ' to ' + botID);
 
-    botReq = HTTPS.request(options, function(res) {
+    const botReq = HTTPS.request(options, function(res) {
         if(res.statusCode == 202) {
             //neat
         } else {
