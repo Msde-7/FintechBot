@@ -25,14 +25,14 @@ const holidays2025 = new Set([
 let isMarketOpenToday = true;
 
 const sendGroupMeMessage = (message) => {
-  console.log("Sending message to GroupMe...");
-    options = {
+    console.log("Sending message to GroupMe...");
+    const options = {
         hostname: 'api.groupme.com',
         path: '/v3/bots/post',
         method: 'POST'
     };
 
-    body = {
+    const body = {
         "text" : message,
         "bot_id" : botID
     };
